@@ -1,6 +1,5 @@
 {
   "recommendations": [
-    "sumneko.lua",
     "davidanson.vscode-markdownlint",
     "editorconfig.editorconfig"
   ]

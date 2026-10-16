@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Reactive Replay</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #11151b; color: #e8edf5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1120px; margin: auto; padding: clamp(16px, 4vw, 40px); }
+    header, .toolbar, .actions, .section-heading { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    header { justify-content: space-between; margin-bottom: 28px; }
+    h1 { font-size: 1.6rem; letter-spacing: -.04em; margin: 0; }
+    h2 { font-size: 1.1rem; margin: 0; }
+    p { line-height: 1.6; }
+    .eyebrow { color: #81dbc3; font-size: .7rem; font-weight: 700; letter-spacing: .16em; margin: 0 0 8px; }
+    .muted, small { color: #a6b2c4; }
+    small { display: block; line-height: 1.6; }
+    button, input, select { font: inherit; border: 1px solid #3c485a; border-radius: 7px; padding: 10px 12px; }
+    button { cursor: pointer; background: #263142; color: #f3f6fb; }
+    button:hover:not(:disabled) { background: #35445b; }
+    button.primary { background: #80dfc5; color: #10271f; border-color: #80dfc5; font-weight: 650; }
+    button:disabled { cursor: default; opacity: .45; }
+    :focus-visible { outline: 2px solid #80dfc5; outline-offset: 3px; }
+    input, select { background: #11151b; color: inherit; width: 100%; min-width: 0; }
+    label { display: block; font-size: .85rem; line-height: 1.5; }
+    label input, label select { margin-top: 7px; }
+    #auto-reconnect, #instant-replay { width: auto; margin: 0 7px 0 0; }
+    .status { border: 1px solid #3c485a; padding: 7px 12px; border-radius: 20px; font-size: .8rem; }
+    .status.connected { color: #80dfc5; border-color: #3c7b6b; }
+    details, .panel { background: #1a202a; border: 1px solid #303b4b; border-radius: 12px; }
+    details { margin-bottom: 22px; }
+    summary { cursor: pointer; padding: 18px 20px; font-weight: 600; }
+    .settings-body { padding: 0 20px 20px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+    .settings-body .actions { margin-top: 16px; }
+    .settings-body hr { border: 0; border-top: 1px solid #303b4b; margin: 24px 0; }
+    .notice { padding: 12px 16px; border-left: 3px solid #80dfc5; background: #182e2a; margin-bottom: 20px; overflow-wrap: anywhere; }
+    .notice[data-kind="error"] { border-color: #ffab9f; background: #382420; }
+    .notice[data-kind="warning"] { border-color: #9e7942; background: #211b14; color: #ffe0a6; }
+    .notice:empty { display: none; }
+    .workspace { display: grid; grid-template-columns: 1fr; gap: 20px; align-items: start; }
+    .panel { padding: 20px; min-width: 0; }
+    .section-heading { justify-content: space-between; margin-bottom: 16px; }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #080b10; border-radius: 7px; }
+    #preview-name { margin: 16px 0 8px; overflow-wrap: anywhere; }
+    #preview-help { min-height: 3em; }
+    .path { font-size: .75rem; overflow-wrap: anywhere; color: #a6b2c4; }
+    .toolbar { margin: 18px 0; }
+    #replays { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; }
+    .replay { border: 1px solid #303b4b; border-radius: 10px; padding: 12px; min-width: 0; background: #11151b; }
+    .replay.selected { border-color: #80dfc5; }
+    .media-frame { position: relative; border-radius: 7px; overflow: hidden; }
+    .thumbnail-frame { margin-bottom: 12px; }
+    .access-overlay { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; background: #211b14f2; color: #ffe0a6; border: 1px solid #9e7942; border-radius: 7px; font-size: .85rem; }
+    .access-overlay button { max-width: 100%; white-space: normal; }
+    .thumbnail { display: block; padding: 0; width: 100%; overflow: hidden; }
+    .thumbnail video { pointer-events: none; }
+    .thumbnail-help { margin-bottom: 8px; }
+    .browse { margin-bottom: 16px; }
+    button[aria-pressed="true"] { border-color: #80dfc5; color: #80dfc5; }
+    #pagination { margin-top: 20px; }
+    #video { max-height: 50vh; }
+    .replay.selected .replay-name { color: #80dfc5; }
+    .replay-name { display: block; font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 5px; }
+    .replay .actions { margin-top: 10px; gap: 8px; }
+    .replay button { font-size: .8rem; padding: 7px 10px; }
+    .empty { text-align: center; padding: 32px 8px; color: #a6b2c4; line-height: 1.7; }
+    #queued { color: #80dfc5; overflow-wrap: anywhere; }
+    footer { font-size: .75rem; color: #a6b2c4; margin-top: 24px; line-height: 1.7; }
+    [hidden] { display: none !important; }
+    @media (max-width: 760px) { .workspace, .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">OBS / REPLAY DESK</p><h1>Reactive Replay</h1></div>
+      <span id="status" class="status" role="status">Disconnected</span>
+    </header>
+    <div id="message" class="notice" role="status" aria-live="polite"></div>
+    <div id="storage-warning" class="notice" data-kind="error" role="status" hidden></div>
+    <div id="folder-warning" class="notice" data-kind="warning" role="status" hidden></div>
+    <details id="settings" open>
+      <summary>Settings</summary>
+      <div class="settings-body">
+        <small>Enable the server in OBS under Tools → WebSocket Server Settings. Connection settings, including the password, are saved in this browser’s local storage.</small>
+        <form id="connection-form">
+          <div class="grid">
+            <label>WebSocket address<input id="address" type="url" value="ws://127.0.0.1:4455" required spellcheck="false"></label>
+            <label>Server password<input id="password" type="password" autocomplete="off"></label>
+          </div>
+          <label><input id="auto-reconnect" type="checkbox" checked>Automatically reconnect</label>
+          <small>Reconnect after connection loss or a page reload if your last action was Connect. Retry delays increase from 1 to 30 seconds.</small>
+          <div class="actions">
+            <button id="connect" class="primary" type="submit">Connect to OBS</button>
+            <button id="disconnect" type="button" disabled>Disconnect</button>
+          </div>
+        </form>
+        <hr>
+        <div class="grid">
+          <label>Replay scene<select id="scene" disabled><option value="">Connect to choose a scene</option></select></label>
+          <label>Replay media source<select id="source" disabled><option value="">Choose a scene first</option></select></label>
+        </div>
+        <small>Choose a Media Source or VLC Video Source directly inside the replay scene. Queue loads one clip; for VLC, it replaces the playlist. Cut to the scene in OBS to play it. Active sources are protected from changes.</small>
+        <label><input id="instant-replay" type="checkbox" aria-describedby="instant-replay-help">Instant replay: automatically queue the latest saved replay</label>
+        <small id="instant-replay-help">New saves replace the selected source’s clip or VLC playlist. Active sources are skipped. Cut away, then queue the clip manually. This option is saved for future visits.</small>
+        <div class="grid">
+          <label>Type for new replay sources<select id="new-source-kind"><option value="ffmpeg_source">Media Source</option><option value="vlc_source">VLC Video Source</option></select></label>
+        </div>
+        <div class="actions"><button id="refresh" type="button" disabled>Refresh scenes</button><button id="add-source" type="button" hidden>Add replay media source</button></div>
+        <p id="scene-help" class="muted">Connect to check for an existing replay scene.</p>
+        <form id="create-form" hidden>
+          <div class="grid">
+            <label>What should the new replay scene be called?<input id="new-scene" placeholder="For example, Replays" maxlength="200" required></label>
+            <div class="actions"><button id="create" type="submit" disabled>Create scene + media source</button></div>
+          </div>
+          <small>Creates an OBS scene with a dedicated source of the chosen type. It does not switch your live scene.</small>
+        </form>
+        <hr>
+        <div class="grid">
+          <label>Hide older replays by<select id="hide-mode"><option value="count">Keep newest clips visible</option><option value="age">Keep recent minutes visible</option></select></label>
+          <label>Clips to keep visible<input id="limit" type="number" min="1" step="1" value="20" required></label>
+          <label>Minutes to keep visible<input id="minutes" type="number" min="0.1" step="0.1" value="5" required></label>
+          <div><label>Preview files</label><div class="actions"><button id="folder" type="button">Choose replay folder</button></div></div>
+        </div>
+        <small id="folder-help">Choose your replay folder to allow browser previews, including newly saved clips. File access lasts until this page is closed or reloaded.</small>
+      </div>
+    </details>
+    <div class="toolbar">
+      <button id="save" class="primary" type="button" disabled>Save replay buffer</button>
+      <span class="muted" id="target">Choose a replay scene in Settings.</span>
+    </div>
+    <div class="workspace">
+      <section class="panel gallery" aria-labelledby="recent-heading">
+        <div class="section-heading"><h2 id="recent-heading">Replays <span class="muted" id="count">0</span></h2><button id="clear" type="button">Clear history</button></div>
+        <div class="actions browse" role="group" aria-label="Replay visibility">
+          <button id="show-recent" type="button" aria-pressed="true">Recent</button>
+          <button id="show-hidden" type="button" aria-pressed="false">Hidden (0)</button>
+        </div>
+        <ol id="replays"></ol>
+        <div id="pagination" class="actions" hidden>
+          <button id="previous-page" type="button">Previous</button>
+          <span id="page-info" class="muted" role="status"></span>
+          <button id="next-page" type="button">Next</button>
+        </div>
+        <div id="empty" class="empty">Your next saved replay will appear here.<br>Connect to OBS and save the replay buffer.</div>
+      </section>
+      <section class="panel" aria-labelledby="preview-heading">
+        <div class="section-heading"><h2 id="preview-heading">Preview</h2><span class="muted">Local playback</span></div>
+        <div class="media-frame">
+          <video id="video" controls autoplay loop muted playsinline preload="metadata" aria-label="Selected replay preview"></video>
+          <div id="preview-access" class="access-overlay">
+            <span id="preview-access-message">Folder access needed to preview local videos.</span>
+            <button id="preview-folder" type="button">Choose replay folder</button>
+          </div>
+        </div>
+        <h2 id="preview-name">Select a replay</h2>
+        <p class="muted" id="preview-help">Preview a clip here before queuing it in OBS. Browser playback never changes the live output.</p>
+        <p class="path" id="preview-path"></p>
+        <div class="actions">
+          <button id="queue-selected" class="primary" type="button" disabled>Queue in OBS</button>
+          <button id="choose-file" type="button" disabled>Choose preview file</button>
+        </div>
+        <p><small>Queued in OBS</small><span id="queued">No clip queued by this page.</span></p>
+      </section>
+    </div>
+    <footer>Runs locally. No uploads or external dependencies. Disable the Lua script’s automatic source updates when using this desk. Each window keeps its own history.</footer>
+    <input id="folder-input" type="file" webkitdirectory multiple hidden>
+    <input id="file-input" type="file" accept="video/*,.mkv,.mov,.mp4,.webm,.flv,.ts" hidden>
+  </main>
+  <script>
+    "use strict";
+
+    class ObsConnection {
+      constructor(onEvent, onState) {
+        this.onEvent = onEvent;
+        this.onState = onState;
+        this.pending = new Map();
+        this.sequence = 0;
+        this.ready = false;
+        this.socket = null;
+      }
+
+      async authentication(password, salt, challenge) {
+        if (!globalThis.crypto?.subtle) throw new Error("Password authentication needs Web Crypto. Open this file locally or use localhost.");
+        const hash = async value => {
+          const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+          return btoa(String.fromCharCode(...new Uint8Array(bytes)));
+        };
+        return hash((await hash(password + salt)) + challenge);
+      }
+
+      connect(address, password) {
+        this.disconnect();
+        const url = new URL(address);
+        if (!["ws:", "wss:"].includes(url.protocol)) throw new Error("Use a ws:// or wss:// WebSocket address.");
+        this.onState("Connecting");
+        return new Promise((resolve, reject) => {
+          const socket = new WebSocket(url.href);
+          this.socket = socket;
+          let identified = false;
+          let failure = "Connection closed. Check OBS WebSocket settings and the password, then reconnect.";
+          const timeout = setTimeout(() => {
+            failure = "OBS connection timed out. Check the address and server settings.";
+            socket.close();
+          }, 10000);
+          socket.onmessage = async event => {
+            if (this.socket !== socket) return;
+            try {
+              const message = JSON.parse(event.data);
+              const data = message.d || {};
+              if (message.op === 0) {
+                if (data.rpcVersion < 1) throw new Error("OBS WebSocket 5 or newer is required.");
+                const identify = { rpcVersion: 1, eventSubscriptions: 1 | 2 | 4 | 8 | 64 | 128 };
+                if (data.authentication) {
+                  identify.authentication = await this.authentication(password, data.authentication.salt, data.authentication.challenge);
+                }
+                password = "";
+                if (this.socket === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: identify }));
+              } else if (message.op === 2) {
+                identified = true;
+                clearTimeout(timeout);
+                this.ready = true;
+                this.onState("Connected");
+                resolve();
+              } else if (message.op === 7) {
+                const request = this.pending.get(data.requestId);
+                if (!request) return;
+                clearTimeout(request.timeout);
+                this.pending.delete(data.requestId);
+                if (data.requestStatus?.result) request.resolve(data.responseData || {});
+                else request.reject(new Error(`${data.requestType}: ${data.requestStatus?.comment || "OBS rejected the request"}`));
+              } else if (message.op === 5 && this.ready) {
+                this.onEvent(data.eventType, data.eventData || {});
+              }
+            } catch (error) {
+              failure = error.message;
+              if (!identified) socket.close();
+              else this.onState("Error", error.message);
+            }
+          };
+          socket.onerror = () => { failure = "Could not connect to OBS. Check the server address, port, and browser permissions."; };
+          socket.onclose = event => {
+            clearTimeout(timeout);
+            password = "";
+            if (!identified) reject(new Error(event.code === 4009 ? "OBS authentication failed. Check the password." : failure));
+            if (this.socket !== socket) return;
+            this.socket = null;
+            this.ready = false;
+            this.rejectPending();
+            this.onState("Disconnected", identified ? failure : "");
+          };
+        });
+      }
+
+      request(requestType, requestData = {}) {
+        if (!this.ready || this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Connect to OBS first."));
+        const requestId = String(++this.sequence);
+        return new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            this.pending.delete(requestId);
+            reject(new Error(`${requestType} timed out. Refresh OBS settings before trying again.`));
+          }, 10000);
+          this.pending.set(requestId, { resolve, reject, timeout });
+          try {
+            this.socket.send(JSON.stringify({ op: 6, d: { requestType, requestId, requestData } }));
+          } catch (error) {
+            clearTimeout(timeout);
+            this.pending.delete(requestId);
+            reject(error);
+          }
+        });
+      }
+
+      rejectPending() {
+        for (const request of this.pending.values()) {
+          clearTimeout(request.timeout);
+          request.reject(new Error("OBS disconnected. Reconnect before trying again."));
+        }
+        this.pending.clear();
+      }
+
+      disconnect() {
+        const socket = this.socket;
+        this.socket = null;
+        this.ready = false;
+        if (socket) socket.close();
+        this.rejectPending();
+        this.onState("Disconnected");
+      }
+    }
+
+    function normalizePath(path) {
+      return path.replaceAll("\\", "/");
+    }
+
+    function findPreviewFile(path, files) {
+      const normalized = normalizePath(path);
+      const exact = files.filter(file => file.webkitRelativePath && normalized.endsWith("/" + normalizePath(file.webkitRelativePath)));
+      if (exact.length === 1) return exact[0];
+      const basename = normalized.split("/").pop();
+      const matches = files.filter(file => file.name === basename);
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    function matchingScene(scenes, previousName) {
+      return scenes.find(scene => scene.sceneName === previousName)
+        || scenes.find(scene => /replay/i.test(scene.sceneName));
+    }
+
+    function supportedSource(kind) {
+      return kind === "ffmpeg_source" || kind === "vlc_source";
+    }
+
+    function replaySettings(kind, path) {
+      if (kind === "vlc_source") {
+        return { playlist: path ? [{ value: path }] : [], loop: false, shuffle: false, playback_behavior: "stop_restart" };
+      }
+      if (kind === "ffmpeg_source") {
+        return { ...(path ? { local_file: path } : {}), is_local_file: true, close_when_inactive: true, restart_on_activate: true, looping: false };
+      }
+      throw new Error("Choose a Media Source or VLC Video Source.");
+    }
+
+    const $ = id => document.getElementById(id);
+    const storageKey = "reactive-replay-desk-v1";
+    let saved = {};
+    let storageAvailable = true;
+    try { saved = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { storageAvailable = false; }
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) saved = {};
+    let replays = Array.isArray(saved.replays) ? saved.replays.filter(item => item && typeof item.path === "string" && typeof item.endpoint === "string" && Number.isFinite(item.savedAt)) : [];
+    let endpoint = typeof saved.address === "string" ? saved.address : "ws://127.0.0.1:4455";
+    let selected = null;
+    let files = [];
+    let fileOverrides = new Map();
+    let previewUrl = null;
+    let previewVersion = 0;
+    let directoryHandle = null;
+    const replayCards = new Map();
+    let browseHidden = false;
+    let hiddenPage = 0;
+    const pageSize = 24;
+    let visibilityTimer = null;
+    let busy = false;
+    let pendingInstantReplay = null;
+    let connectionWanted = saved.connectionWanted === true;
+    let connecting = false;
+    let reconnectTimer = null;
+    let reconnectDelay = 1000;
+    let collectionChanging = false;
+    let refreshVersion = 0;
+    let sourceVersion = 0;
+    let sceneChoice = typeof saved.scene === "string" ? saved.scene : "";
+    let sourceChoice = typeof saved.source === "string" ? saved.source : "";
+    $("settings").open = saved.settingsOpen !== false;
+    $("auto-reconnect").checked = saved.autoReconnect !== false;
+    $("instant-replay").checked = saved.instantReplay === true;
+    $("address").value = endpoint;
+    $("password").value = typeof saved.password === "string" ? saved.password : "";
+    $("limit").value = Number.isSafeInteger(saved.limit) && saved.limit >= 1 ? saved.limit : 20;
+
+    $("hide-mode").value = saved.hideMode === "age" ? "age" : "count";
+    $("minutes").value = Number.isFinite(saved.minutes) && saved.minutes >= 0.1 && saved.minutes <= 525600 ? saved.minutes : 5;
+
+    function persist() {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ settingsOpen: $("settings").open, connectionWanted, autoReconnect: $("auto-reconnect").checked, instantReplay: $("instant-replay").checked, address: endpoint, password: $("password").value, scene: sceneChoice, source: sourceChoice, limit: Number($("limit").value), hideMode: $("hide-mode").value, minutes: Number($("minutes").value), replays }));
+      } catch {
+        storageAvailable = false;
+        $("storage-warning").hidden = false;
+        $("storage-warning").textContent = "Browser storage is full or unavailable. All tracked replays remain available this session, but new history may not survive a reload.";
+      }
+    }
+
+    function notify(message, kind = "info") {
+      $("message").textContent = message;
+      $("message").dataset.kind = kind;
+    }
+
+    function controls() {
+      const ready = obs.ready && !collectionChanging && !busy;
+      $("connect").disabled = busy || obs.ready;
+      $("disconnect").disabled = !obs.socket && reconnectTimer === null;
+      $("address").disabled = !!obs.socket;
+      $("password").disabled = !!obs.socket;
+      for (const id of ["refresh", "create", "save", "add-source"]) $(id).disabled = !ready;
+      $("new-source-kind").disabled = !ready;
+      $("create-form").hidden = !obs.ready || collectionChanging || !!$("scene").value;
+      $("scene").disabled = !ready;
+      $("source").disabled = !ready || !$("scene").value;
+      $("queue-selected").disabled = !ready || !selected || !$("source").value;
+      $("choose-file").disabled = !selected;
+      $("target").textContent = $("source").value ? `Target: ${$("scene").value} / ${$("source").value}` : "Choose a replay scene and media source in Settings.";
+      for (const button of document.querySelectorAll("[data-queue]")) button.disabled = !ready || !$("source").value;
+    }
+
+    const obs = new ObsConnection((type, data) => {
+      if (type === "ReplayBufferSaved") addReplay(data.savedReplayPath);
+      if (type === "CurrentSceneCollectionChanging") {
+        pendingInstantReplay = null;
+        collectionChanging = true;
+        refreshVersion++;
+        sourceVersion++;
+        $("scene").replaceChildren(new Option("Scene collection is changing", ""));
+        $("source").replaceChildren(new Option("Choose a scene first", ""));
+        $("queued").textContent = "No clip queued by this page.";
+        controls();
+      }
+      if (type === "CurrentSceneCollectionChanged") {
+        collectionChanging = false;
+        sceneChoice = "";
+        sourceChoice = "";
+        run(refreshScenes);
+      }
+    }, (state, error) => {
+      $("status").textContent = state;
+      $("status").classList.toggle("connected", state === "Connected");
+      if (error) notify(error, "error");
+      if (state !== "Connected") $("queued").textContent = "Queue state unknown while disconnected.";
+      if (state === "Connected") reconnectDelay = 1000;
+      if (state === "Disconnected") {
+        pendingInstantReplay = null;
+        refreshVersion++;
+        sourceVersion++;
+        if (!connecting) scheduleReconnect();
+      }
+      controls();
+    });
+
+    async function run(action) {
+      if (busy) return;
+      busy = true;
+      controls();
+      try { await action(); } catch (error) { notify(error.message, "error"); }
+      finally { busy = false; controls(); flushInstantReplay(); }
+    }
+
+    function flushInstantReplay() {
+      if (busy || !pendingInstantReplay) return;
+      const { replay, scene, source, socket } = pendingInstantReplay;
+      pendingInstantReplay = null;
+      if (!$("instant-replay").checked || !obs.ready || collectionChanging || socket !== obs.socket
+        || scene !== $("scene").value || source !== $("source").value) return;
+      run(() => queueReplay(replay, true));
+    }
+
+    function partitionReplays(now = Date.now()) {
+      const tracked = replays.filter(item => item.endpoint === endpoint);
+      const cutoff = now - Number($("minutes").value) * 60000;
+      const recent = [];
+      const hidden = [];
+      tracked.forEach((replay, index) => {
+        const visible = $("hide-mode").value === "age" ? replay.savedAt > cutoff : index < Number($("limit").value);
+        (visible ? recent : hidden).push(replay);
+      });
+      return { recent, hidden };
+    }
+
+    function visibleReplays() {
+      const { recent, hidden } = partitionReplays();
+      return browseHidden ? hidden.slice(hiddenPage * pageSize, (hiddenPage + 1) * pageSize) : recent;
+    }
+
+    function releaseCard(replay) {
+      const card = replayCards.get(replay);
+      card.video.pause();
+      card.video.removeAttribute("src");
+      card.video.load();
+      if (card.url) URL.revokeObjectURL(card.url);
+      replayCards.delete(replay);
+    }
+
+    function accessMessage() {
+      return directoryHandle || files.length
+        ? "Replay file unavailable. Choose the folder containing this clip."
+        : "Folder access needed to preview local videos.";
+    }
+
+    function updatePreviewAccess() {
+      $("preview-access").hidden = !!previewUrl || (!selected && !!(directoryHandle || files.length));
+      $("preview-access-message").textContent = accessMessage();
+    }
+
+    function createAccessOverlay() {
+      const overlay = document.createElement("div");
+      overlay.className = "access-overlay";
+      const message = document.createElement("span");
+      message.textContent = accessMessage();
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Choose replay folder";
+      button.onclick = chooseReplayFolder;
+      overlay.append(message, button);
+      return overlay;
+    }
+
+    function refreshThumbnails() {
+      updatePreviewAccess();
+      for (const replay of replayCards.keys()) releaseCard(replay);
+      renderReplays();
+    }
+
+    async function loadThumbnail(replay, card) {
+      const file = await previewFile(replay);
+      if (replayCards.get(replay) !== card) return;
+      if (!file) {
+        card.overlay.hidden = false;
+        card.help.textContent = "Allow folder access using the button above.";
+        return;
+      }
+      card.overlay.hidden = true;
+      card.url = URL.createObjectURL(file);
+      card.video.src = card.url;
+      card.help.textContent = "Loading thumbnail…";
+      card.video.onloadedmetadata = () => {
+        if (Number.isFinite(card.video.duration) && card.video.duration > 0) card.video.currentTime = Math.min(0.1, card.video.duration / 2);
+      };
+      card.video.onloadeddata = () => { card.help.textContent = "Ready to preview"; };
+      card.video.onerror = () => { card.help.textContent = "Thumbnail unavailable. You can still queue this clip in OBS."; };
+      card.video.load();
+    }
+
+    function createReplayCard(replay) {
+      const item = document.createElement("li");
+      const frame = document.createElement("div");
+      frame.className = "media-frame thumbnail-frame";
+      const overlay = createAccessOverlay();
+      overlay.hidden = true;
+      const thumbnail = document.createElement("button");
+      thumbnail.className = "thumbnail";
+      thumbnail.type = "button";
+      const video = document.createElement("video");
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.setAttribute("aria-hidden", "true");
+      thumbnail.append(video);
+      frame.append(thumbnail, overlay);
+      const help = document.createElement("small");
+      help.className = "thumbnail-help";
+      const name = document.createElement("span");
+      name.className = "replay-name";
+      name.textContent = normalizePath(replay.path).split("/").pop();
+      name.title = replay.path;
+      thumbnail.setAttribute("aria-label", `Preview ${name.textContent}`);
+      thumbnail.onclick = () => selectReplay(replay);
+      const time = document.createElement("small");
+      time.textContent = new Date(replay.savedAt).toLocaleString();
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const preview = document.createElement("button");
+      preview.textContent = "Preview";
+      preview.setAttribute("aria-label", `Preview ${name.textContent}`);
+      preview.onclick = () => selectReplay(replay);
+      const queue = document.createElement("button");
+      queue.textContent = "Queue in OBS";
+      queue.dataset.queue = "";
+      queue.setAttribute("aria-label", `Queue ${name.textContent} in OBS`);
+      queue.onclick = () => run(() => queueReplay(replay));
+      actions.append(preview, queue);
+      item.append(frame, name, time, help, actions);
+      const card = { item, video, help, overlay, url: null };
+      replayCards.set(replay, card);
+      loadThumbnail(replay, card);
+      return card;
+    }
+
+    function renderReplays() {
+      clearTimeout(visibilityTimer);
+      visibilityTimer = null;
+      const { recent, hidden } = partitionReplays();
+      const pages = Math.max(1, Math.ceil(hidden.length / pageSize));
+      hiddenPage = Math.min(hiddenPage, pages - 1);
+      const visible = visibleReplays();
+      for (const replay of replayCards.keys()) if (!visible.includes(replay)) releaseCard(replay);
+      const items = visible.map(replay => {
+        const card = replayCards.get(replay) || createReplayCard(replay);
+        card.item.className = "replay" + (selected === replay ? " selected" : "");
+        return card.item;
+      });
+      $("replays").replaceChildren(...items);
+      $("count").textContent = `${recent.length} recent / ${recent.length + hidden.length} tracked`;
+      $("show-recent").setAttribute("aria-pressed", String(!browseHidden));
+      $("show-hidden").setAttribute("aria-pressed", String(browseHidden));
+      $("show-hidden").textContent = `Hidden (${hidden.length})`;
+      $("empty").hidden = visible.length > 0;
+      $("empty").textContent = browseHidden ? "No hidden replays." : hidden.length ? "No recent replays. Browse Hidden to find older clips." : "Your next saved replay will appear here. Connect to OBS and save the replay buffer.";
+      $("pagination").hidden = !browseHidden || pages <= 1;
+      $("previous-page").disabled = hiddenPage === 0;
+      $("next-page").disabled = hiddenPage >= pages - 1;
+      $("page-info").textContent = `Page ${hiddenPage + 1} of ${pages}`;
+      $("limit").disabled = $("hide-mode").value !== "count";
+      $("minutes").disabled = $("hide-mode").value !== "age";
+      if ($("hide-mode").value === "age" && recent.length) {
+        const nextExpiry = recent.reduce((earliest, replay) => Math.min(earliest, replay.savedAt), Infinity) + Number($("minutes").value) * 60000;
+        visibilityTimer = setTimeout(renderReplays, Math.max(1, Math.min(2147483647, nextExpiry - Date.now())));
+      }
+      controls();
+    }
+
+    function addReplay(path, announce = true) {
+      if (typeof path !== "string" || !path) return;
+      const existing = replays.find(item => item.path === path && item.endpoint === endpoint);
+      if (existing) return;
+      const replay = { path, savedAt: Date.now(), endpoint };
+      replays.unshift(replay);
+      persist();
+      renderReplays();
+      if (!selected) selectReplay(replay);
+      if (announce) notify("Replay saved. Preview or queue it when you are ready.");
+      if (announce && $("instant-replay").checked) {
+        pendingInstantReplay = { replay, scene: $("scene").value, source: $("source").value, socket: obs.socket };
+        flushInstantReplay();
+      }
+    }
+
+    function resetPreview() {
+      previewVersion++;
+      $("video").pause();
+      $("video").removeAttribute("src");
+      $("video").load();
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = null;
+      updatePreviewAccess();
+    }
+
+    async function previewFile(replay) {
+      let file = fileOverrides.get(replay.path) || findPreviewFile(replay.path, files);
+      if (!file && directoryHandle) {
+        try {
+          const path = normalizePath(replay.path);
+          const marker = "/" + directoryHandle.name + "/";
+          const index = path.lastIndexOf(marker);
+          const parts = index >= 0 ? path.slice(index + marker.length).split("/") : [path.split("/").pop()];
+          let directory = directoryHandle;
+          for (const part of parts.slice(0, -1)) directory = await directory.getDirectoryHandle(part);
+          file = await (await directory.getFileHandle(parts.at(-1))).getFile();
+        } catch {
+          file = null;
+        }
+      }
+      return file;
+    }
+
+    async function selectReplay(replay) {
+      selected = replay;
+      resetPreview();
+      const version = previewVersion;
+      $("preview-name").textContent = normalizePath(replay.path).split("/").pop();
+      $("preview-path").textContent = replay.path;
+      const file = await previewFile(replay);
+      if (version !== previewVersion) return;
+      if (file) {
+        previewUrl = URL.createObjectURL(file);
+        $("video").src = previewUrl;
+        $("preview-help").textContent = "Use the video controls to preview this clip. Playback stays in this browser.";
+      } else {
+        $("preview-help").textContent = "Choose this replay’s video file below, or select its folder in Settings. Re-select the folder to include newly saved clips.";
+      }
+      updatePreviewAccess();
+      renderReplays();
+    }
+
+    async function refreshScenes() {
+      const version = ++refreshVersion;
+      const { scenes } = await obs.request("GetSceneList");
+      if (version !== refreshVersion || collectionChanging) return;
+      $("scene").replaceChildren(new Option("Choose a scene", ""));
+      for (const scene of scenes) $("scene").add(new Option(scene.sceneName, scene.sceneName));
+      $("scene").value = matchingScene(scenes, sceneChoice)?.sceneName || "";
+      sceneChoice = $("scene").value;
+      $("scene-help").textContent = sceneChoice
+        ? `Found replay scene: ${sceneChoice}. You can choose another scene above.`
+        : "No matching replay scene found. Choose an existing scene above, or enter a name to create one below.";
+      persist();
+      await refreshSources();
+    }
+
+    async function refreshSources() {
+      const version = ++sourceVersion;
+      const scene = $("scene").value;
+      $("add-source").hidden = true;
+      $("source").replaceChildren(new Option("Choose a Media or VLC source", ""));
+      controls();
+      if (!scene) return;
+      const { sceneItems } = await obs.request("GetSceneItemList", { sceneName: scene });
+      if (version !== sourceVersion || collectionChanging || scene !== $("scene").value) return;
+      const sources = sceneItems.filter(item => supportedSource(item.inputKind));
+      $("add-source").hidden = sources.length > 0;
+      for (const item of sources) $("source").add(new Option(`${item.sourceName} (${item.inputKind === "vlc_source" ? "VLC" : "Media"})`, item.sourceName));
+      $("source").value = sources.some(item => item.sourceName === sourceChoice) ? sourceChoice : sources.length === 1 ? sources[0].sourceName : "";
+      sourceChoice = $("source").value;
+      if (!sources.length) notify("This scene has no direct Media or VLC source. Choose a source type, then use Add replay media source to create one in this scene.");
+      persist();
+      controls();
+    }
+
+    async function queueReplay(replay, automatic = false) {
+      const source = $("source").value;
+      const scene = $("scene").value;
+      const socket = obs.socket;
+      if (!source || !scene || collectionChanging) throw new Error("Choose a replay scene and media source first.");
+      const { sceneItems } = await obs.request("GetSceneItemList", { sceneName: scene });
+      const item = sceneItems.find(item => item.sourceName === source && supportedSource(item.inputKind));
+      if (!item) throw new Error("The selected Media or VLC source is no longer in this scene. Refresh Settings.");
+      const { videoActive } = await obs.request("GetSourceActive", { sourceName: source });
+      if (videoActive) throw new Error("This media source is active in OBS. Cut away from it and finish the transition before queuing another replay.");
+      if (collectionChanging || socket !== obs.socket || scene !== $("scene").value || source !== $("source").value) throw new Error("OBS settings changed. Choose the replay target again.");
+      if (automatic && !$("instant-replay").checked) return;
+      await obs.request("SetInputSettings", {
+        inputName: source,
+        inputSettings: replaySettings(item.inputKind, replay.path),
+        overlay: true
+      });
+      $("queued").textContent = normalizePath(replay.path).split("/").pop();
+      notify(`Replay queued in ${scene}. Cut to that scene in OBS to play it.`);
+    }
+
+    async function newSourceKind() {
+      const kind = $("new-source-kind").value;
+      if (!supportedSource(kind)) throw new Error("Choose a Media Source or VLC Video Source.");
+      const { inputKinds } = await obs.request("GetInputKindList");
+      if (!inputKinds.includes(kind)) throw new Error(kind === "vlc_source"
+        ? "VLC Video Source is unavailable in OBS. Install a compatible VLC version and restart OBS, or choose Media Source."
+        : "Media Source is unavailable in OBS.");
+      return kind;
+    }
+
+    async function createMediaSource(sceneName, kind) {
+      const { inputs } = await obs.request("GetInputList");
+      let inputName = `${sceneName} Video`;
+      let suffix = 2;
+      while (inputs.some(input => input.inputName === inputName)) inputName = `${sceneName} Video ${suffix++}`;
+      await obs.request("CreateInput", {
+        sceneName, inputName, inputKind: kind, sceneItemEnabled: true,
+        inputSettings: replaySettings(kind)
+      });
+      sourceChoice = inputName;
+      return inputName;
+    }
+
+    function cancelReconnect() {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    function scheduleReconnect() {
+      if (!connectionWanted || !$("auto-reconnect").checked || obs.socket || reconnectTimer !== null) return;
+      const delay = reconnectDelay;
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      $("status").textContent = `Reconnecting in ${delay / 1000}s`;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectToObs();
+      }, delay);
+      controls();
+    }
+
+    async function connectToObs() {
+      if (busy) { scheduleReconnect(); return; }
+      cancelReconnect();
+      connecting = true;
+      await run(async () => {
+        const address = new URL($("address").value.trim()).href;
+        if (address !== endpoint) { sceneChoice = ""; sourceChoice = ""; }
+        endpoint = address;
+        selected = null;
+        resetPreview();
+        $("preview-name").textContent = "Select a replay";
+        $("preview-path").textContent = "";
+        renderReplays();
+        persist();
+        const connection = obs.connect(endpoint, $("password").value);
+        controls();
+        await connection;
+        collectionChanging = false;
+        await refreshScenes();
+        persist();
+        notify("Connected. Save a replay to add it to the grid.");
+        try {
+          const { savedReplayPath } = await obs.request("GetLastReplayBufferReplay");
+          addReplay(savedReplayPath, false);
+        } catch {
+          notify("Connected. No last replay is available yet. Save the replay buffer to add a clip.");
+        }
+      });
+      connecting = false;
+      scheduleReconnect();
+    }
+
+    $("connection-form").onsubmit = event => {
+      event.preventDefault();
+      connectionWanted = true;
+      persist();
+      reconnectDelay = 1000;
+      connectToObs();
+    };
+    $("disconnect").onclick = () => {
+      connectionWanted = false;
+      persist();
+      cancelReconnect();
+      obs.disconnect();
+    };
+    $("auto-reconnect").onchange = () => {
+      persist();
+      cancelReconnect();
+      reconnectDelay = 1000;
+      if (connectionWanted && $("auto-reconnect").checked && !obs.socket) {
+        connectToObs();
+      } else {
+        if (!obs.socket) $("status").textContent = "Disconnected";
+        controls();
+      }
+    };
+    $("settings").ontoggle = persist;
+    $("password").onchange = persist;
+    $("instant-replay").onchange = () => {
+      pendingInstantReplay = null;
+      persist();
+    };
+    $("refresh").onclick = () => run(refreshScenes);
+    $("scene").onchange = () => {
+      sceneChoice = $("scene").value;
+      sourceChoice = "";
+      $("scene-help").textContent = sceneChoice ? `Using replay scene: ${sceneChoice}.` : "Choose an existing scene, or enter a name to create a new replay scene below.";
+      $("queued").textContent = "No clip queued by this page.";
+      persist();
+      run(refreshSources);
+    };
+    $("source").onchange = () => {
+      sourceChoice = $("source").value;
+      $("queued").textContent = "No clip queued by this page.";
+      persist();
+      controls();
+    };
+    $("create-form").onsubmit = event => {
+      event.preventDefault();
+      run(async () => {
+        const name = $("new-scene").value.trim();
+        if (!name) throw new Error("Enter a scene name.");
+        const { scenes } = await obs.request("GetSceneList");
+        if (scenes.some(scene => scene.sceneName === name)) {
+          sceneChoice = name;
+          await refreshScenes();
+          notify(`Scene ${name} already exists. Selected it instead of creating a duplicate.`);
+          return;
+        }
+        const kind = await newSourceKind();
+        await obs.request("CreateScene", { sceneName: name });
+        sceneChoice = name;
+        let inputName;
+        try {
+          inputName = await createMediaSource(name, kind);
+        } catch (error) {
+          await refreshScenes();
+          throw new Error(`Scene "${name}" was created, but its media source could not be added. Add a Media or VLC source in OBS, then refresh. ${error.message}`);
+        }
+        await refreshScenes();
+        notify(`Created ${name} with media source ${inputName}. Queue a replay when ready.`);
+      });
+    };
+    $("add-source").onclick = () => run(async () => {
+      const sceneName = $("scene").value;
+      if (!sceneName) throw new Error("Choose a replay scene first.");
+      const kind = await newSourceKind();
+      await createMediaSource(sceneName, kind);
+      await refreshSources();
+      notify(`Added a replay media source to ${sceneName}.`);
+    });
+    $("save").onclick = () => run(async () => {
+      const { outputActive } = await obs.request("GetReplayBufferStatus");
+      if (!outputActive) throw new Error("Start the replay buffer in OBS before saving a replay.");
+      await obs.request("SaveReplayBuffer");
+      notify("Replay save requested. The clip will appear when OBS finishes writing it.");
+    });
+    $("queue-selected").onclick = () => run(() => queueReplay(selected));
+    function warnFolderAccess() {
+      $("folder-warning").textContent = "Automatic access to newly saved clips is unavailable in this browser or page context. Use a supported browser such as desktop Chrome or Edge in a secure context. You can still choose a folder snapshot, then choose it again after saving new clips, or use Choose preview file for one clip.";
+      $("folder-warning").hidden = false;
+    }
+    $("folder-warning").hidden = typeof window.showDirectoryPicker === "function";
+    if (!$("folder-warning").hidden) warnFolderAccess();
+    async function chooseReplayFolder() {
+      if (typeof window.showDirectoryPicker !== "function") { warnFolderAccess(); $("folder-input").click(); return; }
+      try {
+        directoryHandle = await window.showDirectoryPicker({ mode: "read" });
+        $("folder-warning").hidden = true;
+        files = [];
+        refreshThumbnails();
+        $("folder-help").textContent = `Preview folder: ${directoryHandle.name}. New clips in this folder can be opened automatically. Choose it again after reloading this page.`;
+        if (selected) await selectReplay(selected);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          warnFolderAccess();
+          notify("Folder access is unavailable in this browser. Use Choose preview file, or try the folder picker again.", "error");
+          $("folder-input").click();
+        }
+      }
+    }
+    $("folder").onclick = chooseReplayFolder;
+    $("preview-folder").onclick = chooseReplayFolder;
+    $("folder-input").onchange = event => {
+      files = Array.from(event.target.files);
+      directoryHandle = null;
+      refreshThumbnails();
+      $("folder-help").textContent = `${files.length} files available for preview. Choose the folder again after saving new clips. Access lasts until this page is closed or reloaded.`;
+      if (selected) selectReplay(selected);
+      event.target.value = "";
+    };
+    $("choose-file").onclick = () => $("file-input").click();
+    $("file-input").onchange = event => {
+      const file = event.target.files[0];
+      if (file && selected) {
+        if (file.name !== normalizePath(selected.path).split("/").pop()) {
+          notify("Choose the file with the same name as this replay. OBS will still queue the original saved path.", "error");
+        } else {
+          fileOverrides.set(selected.path, file);
+          refreshThumbnails();
+          selectReplay(selected);
+        }
+      }
+      event.target.value = "";
+    };
+    $("video").onplay = () => {
+      $("preview-help").textContent = "Playing locally. OBS output is unchanged.";
+    };
+    $("video").onerror = () => {
+      if (!previewUrl) return;
+      $("preview-help").textContent = "The browser could not play this file. Check its availability and codec. H.264 MP4 is widely supported; MKV or HEVC may not play in this browser. You can still queue it in OBS.";
+    };
+    function updateVisibility() {
+      const limit = Number($("limit").value);
+      const minutes = Number($("minutes").value);
+      if (!Number.isSafeInteger(limit) || limit < 1) $("limit").value = 20;
+      if (!Number.isFinite(minutes) || minutes < 0.1 || minutes > 525600) $("minutes").value = 5;
+      hiddenPage = 0;
+      persist();
+      renderReplays();
+    }
+    $("limit").onchange = updateVisibility;
+    $("minutes").onchange = updateVisibility;
+    $("hide-mode").onchange = updateVisibility;
+    $("show-recent").onclick = () => { browseHidden = false; renderReplays(); };
+    $("show-hidden").onclick = () => { browseHidden = true; hiddenPage = 0; renderReplays(); };
+    $("previous-page").onclick = () => { hiddenPage = Math.max(0, hiddenPage - 1); renderReplays(); };
+    $("next-page").onclick = () => { hiddenPage++; renderReplays(); };
+    $("clear").onclick = () => {
+      replays = replays.filter(item => item.endpoint !== endpoint);
+      selected = null;
+      fileOverrides.clear();
+      resetPreview();
+      $("preview-name").textContent = "Select a replay";
+      $("preview-path").textContent = "";
+      $("preview-help").textContent = "History cleared. Your saved video files and the OBS source are unchanged.";
+      persist();
+      renderReplays();
+    };
+    window.addEventListener("beforeunload", () => { connectionWanted = false; cancelReconnect(); clearTimeout(visibilityTimer); for (const replay of replayCards.keys()) releaseCard(replay); resetPreview(); obs.disconnect(); });
+    renderReplays();
+    if (connectionWanted && $("auto-reconnect").checked && typeof saved.address === "string" && saved.address) {
+      connectToObs();
+    }
+    if (!storageAvailable) notify("Browser storage is unavailable. History and settings will last only for this page session.");
+  </script>
+</body>
+</html>
