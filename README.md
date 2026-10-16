@@ -129,7 +129,10 @@ Use **Hidden** to browse them in pages of 24 clips, with the same preview and qu
 Changing the visibility rules never removes history.
 
 **Clear history** forgets the tracked paths for the current WebSocket address.
-It never deletes video files.
+To remove only older entries, set **Clear items older than (hours)** and click **Clear older items**.
+The default is 24 hours, and the chosen age is saved for future visits.
+Cleanup uses the time each replay was first tracked by the desk.
+Both actions include hidden items and never delete video files or change the OBS source.
 If storage fills up, the desk warns you and keeps tracking in memory for the current session.
 
 Use a dedicated Media Source or VLC Video Source directly inside the replay scene.

@@ -136,6 +136,10 @@
     <div class="workspace">
       <section class="panel gallery" aria-labelledby="recent-heading">
         <div class="section-heading"><h2 id="recent-heading">Replays <span class="muted" id="count">0</span></h2><button id="clear" type="button">Clear history</button></div>
+        <form id="cleanup-form" class="toolbar" aria-label="History cleanup">
+          <label>Clear items older than (hours)<input id="cleanup-hours" type="number" min="0.1" step="any" value="24" required></label>
+          <button type="submit">Clear older items</button>
+        </form>
         <div class="actions browse" role="group" aria-label="Replay visibility">
           <button id="show-recent" type="button" aria-pressed="true">Recent</button>
           <button id="show-hidden" type="button" aria-pressed="false">Hidden (0)</button>
@@ -364,10 +368,11 @@
 
     $("hide-mode").value = saved.hideMode === "age" ? "age" : "count";
     $("minutes").value = Number.isFinite(saved.minutes) && saved.minutes >= 0.1 && saved.minutes <= 525600 ? saved.minutes : 5;
+    $("cleanup-hours").value = Number.isFinite(saved.cleanupHours) && saved.cleanupHours >= 0.1 && Number.isFinite(saved.cleanupHours * 3600000) ? saved.cleanupHours : 24;
 
     function persist() {
       try {
-        localStorage.setItem(storageKey, JSON.stringify({ settingsOpen: $("settings").open, connectionWanted, autoReconnect: $("auto-reconnect").checked, instantReplay: $("instant-replay").checked, address: endpoint, password: $("password").value, scene: sceneChoice, source: sourceChoice, limit: Number($("limit").value), hideMode: $("hide-mode").value, minutes: Number($("minutes").value), replays }));
+        localStorage.setItem(storageKey, JSON.stringify({ settingsOpen: $("settings").open, connectionWanted, autoReconnect: $("auto-reconnect").checked, instantReplay: $("instant-replay").checked, address: endpoint, password: $("password").value, scene: sceneChoice, source: sourceChoice, limit: Number($("limit").value), hideMode: $("hide-mode").value, minutes: Number($("minutes").value), cleanupHours: Number($("cleanup-hours").value), replays }));
       } catch {
         storageAvailable = false;
         $("storage-warning").hidden = false;
@@ -947,16 +952,37 @@
     $("show-hidden").onclick = () => { browseHidden = true; hiddenPage = 0; renderReplays(); };
     $("previous-page").onclick = () => { hiddenPage = Math.max(0, hiddenPage - 1); renderReplays(); };
     $("next-page").onclick = () => { hiddenPage++; renderReplays(); };
-    $("clear").onclick = () => {
-      replays = replays.filter(item => item.endpoint !== endpoint);
-      selected = null;
-      fileOverrides.clear();
-      resetPreview();
-      $("preview-name").textContent = "Select a replay";
-      $("preview-path").textContent = "";
-      $("preview-help").textContent = "History cleared. Your saved video files and the OBS source are unchanged.";
+    function clearHistory(cutoff = Infinity) {
+      const removed = replays.filter(item => item.endpoint === endpoint && item.savedAt < cutoff);
+      replays = replays.filter(item => item.endpoint !== endpoint || item.savedAt >= cutoff);
+      for (const replay of removed) {
+        if (!replays.some(item => item.path === replay.path)) fileOverrides.delete(replay.path);
+      }
+      if (pendingInstantReplay && removed.includes(pendingInstantReplay.replay)) pendingInstantReplay = null;
+      if (selected && removed.includes(selected)) {
+        selected = null;
+        resetPreview();
+        $("preview-name").textContent = "Select a replay";
+        $("preview-path").textContent = "";
+        $("preview-help").textContent = "History cleared. Your saved video files and the OBS source are unchanged.";
+      }
       persist();
       renderReplays();
+      notify(`Cleared ${removed.length} history item${removed.length === 1 ? "" : "s"}. Your saved video files and the OBS source are unchanged.`);
+    }
+    $("clear").onclick = () => clearHistory();
+    $("cleanup-hours").onchange = () => {
+      const hours = Number($("cleanup-hours").value);
+      if (Number.isFinite(hours) && hours >= 0.1 && Number.isFinite(hours * 3600000)) persist();
+    };
+    $("cleanup-form").onsubmit = event => {
+      event.preventDefault();
+      const hours = Number($("cleanup-hours").value);
+      if (!Number.isFinite(hours) || hours < 0.1 || !Number.isFinite(hours * 3600000)) {
+        notify("Enter an age of at least 0.1 hours to clear older history items.", "error");
+        return;
+      }
+      clearHistory(Date.now() - hours * 3600000);
     };
     window.addEventListener("beforeunload", () => { connectionWanted = false; cancelReconnect(); clearTimeout(visibilityTimer); for (const replay of replayCards.keys()) releaseCard(replay); resetPreview(); obs.disconnect(); });
     renderReplays();

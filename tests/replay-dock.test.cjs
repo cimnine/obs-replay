@@ -623,6 +623,72 @@ test("age filtering expires clips without a new event and persists its settings"
   assert.equal(Number(restored.elements.get("minutes").value), 5);
 });
 
+test("clears only history older than the default 24 hours for the current server", async () => {
+  const desk = app();
+  assert.equal(Number(desk.elements.get("cleanup-hours").value), 24);
+  desk.evaluate(`
+    Date.now = () => 100 * 3600000;
+    addReplay("/Clips/old.mp4");
+    replays[0].savedAt = Date.now() - 25 * 3600000;
+    addReplay("/Clips/boundary.mp4");
+    replays[0].savedAt = Date.now() - 24 * 3600000;
+    addReplay("/Clips/recent.mp4");
+    replays.push({ path: "/Clips/other.mp4", savedAt: 0, endpoint: "ws://other:4455" });
+    $("limit").value = 1;
+    renderReplays();
+  `);
+  await desk.submit("cleanup-form");
+  assert.deepEqual(Array.from(desk.evaluate("replays.map(item => item.path)")), ["/Clips/recent.mp4", "/Clips/boundary.mp4", "/Clips/other.mp4"]);
+  assert.equal(desk.evaluate("selected"), null);
+  assert.equal(desk.elements.get("preview-name").textContent, "Select a replay");
+  assert.equal(desk.elements.get("show-hidden").textContent, "Hidden (1)");
+  assert.match(desk.elements.get("message").textContent, /Cleared 1 history item\./);
+  assert.equal(desk.state.requests.length, 0);
+  const restored = app({ storage: desk.storage });
+  assert.equal(restored.evaluate("replays.length"), 3);
+});
+
+test("custom cleanup age persists and preserves a retained preview", async () => {
+  const desk = app();
+  desk.evaluate(`
+    addReplay("/Clips/old.mp4");
+    replays[0].savedAt -= 2 * 3600000;
+    addReplay("/Clips/recent.mp4");
+    selectReplay(replays[0]);
+    fileOverrides.set(replays[0].path, { name: "recent.mp4" });
+    fileOverrides.set(replays[1].path, { name: "old.mp4" });
+  `);
+  await desk.settle();
+  const selected = desk.evaluate("selected");
+  const oldCard = desk.evaluate("replayCards.get(replays[1])");
+  desk.elements.get("cleanup-hours").value = "0.5";
+  desk.elements.get("cleanup-hours").onchange();
+  assert.equal(Number(app({ storage: desk.storage }).elements.get("cleanup-hours").value), 0.5);
+  await desk.submit("cleanup-form");
+  assert.equal(desk.evaluate("replays.length"), 1);
+  assert.equal(desk.evaluate("selected"), selected);
+  assert.equal(desk.elements.get("preview-name").textContent, "recent.mp4");
+  assert.equal(desk.evaluate("fileOverrides.has('/Clips/recent.mp4')"), true);
+  assert.equal(desk.evaluate("fileOverrides.has('/Clips/old.mp4')"), false);
+  assert.equal(oldCard.video.src, undefined);
+  assert.equal(desk.evaluate("replayCards.size"), 1);
+});
+
+test("invalid cleanup ages leave history intact and invalid saved ages default to 24 hours", async () => {
+  const desk = app();
+  desk.evaluate('addReplay("/Clips/old.mp4"); replays[0].savedAt = 0');
+  for (const value of ["", "0", "-1", "NaN", "Infinity", "1e308"]) {
+    desk.elements.get("cleanup-hours").value = value;
+    await desk.submit("cleanup-form");
+    assert.equal(desk.evaluate("replays.length"), 1);
+    assert.equal(desk.elements.get("message").dataset.kind, "error");
+  }
+  for (const cleanupHours of [null, 0, -1, "12", 1e308]) {
+    const storage = new Map([["reactive-replay-desk-v1", JSON.stringify({ cleanupHours })]]);
+    assert.equal(Number(app({ storage }).elements.get("cleanup-hours").value), 24);
+  }
+});
+
 test("loads grid thumbnails from folder access and releases them when hidden", async () => {
   const desk = app();
   desk.evaluate('addReplay("/Clips/one.mp4"); addReplay("/Clips/two.mp4")');
