@@ -94,7 +94,7 @@ function app({ scenes = [], inputs = [], storage = new Map(), password = "" } = 
     static revokeObjectURL() {}
   }
   const context = vm.createContext({
-    document: { getElementById: id => elements.get(id), createElement: tag => new Element(tag), querySelectorAll: () => [] },
+    document: { documentElement: { dataset: { connection: "idle" } }, getElementById: id => elements.get(id), createElement: tag => new Element(tag), querySelectorAll: () => [] },
     window: { addEventListener: (name, callback) => { state[name] = callback; } },
     Option: function(text, value) { return { text, value }; },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
@@ -771,4 +771,30 @@ test("cancelling inline folder access retains the warning and snapshot access cl
   await desk.settle();
   assert.equal(desk.elements.get("preview-access").hidden, true);
   assert.equal(desk.evaluate("replayCards.get(replays[0]).overlay.hidden"), true);
+});
+
+
+test("accent follows connection success, loss, retries, and explicit disconnect", async () => {
+  const desk = app();
+  const accent = () => desk.evaluate("document.documentElement.dataset.connection");
+  assert.equal(accent(), "idle");
+  await desk.connect();
+  assert.equal(accent(), "connected");
+  desk.state.offline = true;
+  desk.state.socket.close(1006);
+  await desk.settle();
+  assert.equal(accent(), "lost");
+  await desk.retry(1000);
+  assert.equal(accent(), "lost");
+  desk.state.offline = false;
+  await desk.retry(2000);
+  assert.equal(accent(), "connected");
+  desk.elements.get("disconnect").onclick();
+  assert.equal(accent(), "idle");
+  await desk.connect();
+  desk.state.socket.close(1006);
+  await desk.settle();
+  assert.equal(accent(), "lost");
+  desk.elements.get("disconnect").onclick();
+  assert.equal(accent(), "idle");
 });

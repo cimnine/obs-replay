@@ -1,12 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-connection="idle">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Reactive Replay</title>
   <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #11151b; color: #e8edf5; }
+    :root { --accent: #80baff; --accent-text: #102138; --accent-border: #466b99; --accent-background: #192a40; color-scheme: dark; font-family: system-ui, sans-serif; background: #11151b; color: #e8edf5; }
+    :root[data-connection="connected"] { --accent: #80dfc5; --accent-text: #10271f; --accent-border: #3c7b6b; --accent-background: #182e2a; }
+    :root[data-connection="lost"] { --accent: #ffab80; --accent-text: #351b10; --accent-border: #a86643; --accent-background: #382820; }
     * { box-sizing: border-box; }
     body { margin: 0; }
     main { max-width: 1120px; margin: auto; padding: clamp(16px, 4vw, 40px); }
@@ -15,21 +17,20 @@
     h1 { font-size: 1.6rem; letter-spacing: -.04em; margin: 0; }
     h2 { font-size: 1.1rem; margin: 0; }
     p { line-height: 1.6; }
-    .eyebrow { color: #81dbc3; font-size: .7rem; font-weight: 700; letter-spacing: .16em; margin: 0 0 8px; }
+    .eyebrow { color: var(--accent); font-size: .7rem; font-weight: 700; letter-spacing: .16em; margin: 0 0 8px; }
     .muted, small { color: #a6b2c4; }
     small { display: block; line-height: 1.6; }
     button, input, select { font: inherit; border: 1px solid #3c485a; border-radius: 7px; padding: 10px 12px; }
     button { cursor: pointer; background: #263142; color: #f3f6fb; }
     button:hover:not(:disabled) { background: #35445b; }
-    button.primary { background: #80dfc5; color: #10271f; border-color: #80dfc5; font-weight: 650; }
+    button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 650; }
     button:disabled { cursor: default; opacity: .45; }
-    :focus-visible { outline: 2px solid #80dfc5; outline-offset: 3px; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     input, select { background: #11151b; color: inherit; width: 100%; min-width: 0; }
     label { display: block; font-size: .85rem; line-height: 1.5; }
     label input, label select { margin-top: 7px; }
     #auto-reconnect, #instant-replay { width: auto; margin: 0 7px 0 0; }
-    .status { border: 1px solid #3c485a; padding: 7px 12px; border-radius: 20px; font-size: .8rem; }
-    .status.connected { color: #80dfc5; border-color: #3c7b6b; }
+    .status { color: var(--accent); border: 1px solid var(--accent-border); padding: 7px 12px; border-radius: 20px; font-size: .8rem; }
     details, .panel { background: #1a202a; border: 1px solid #303b4b; border-radius: 12px; }
     details { margin-bottom: 22px; }
     summary { cursor: pointer; padding: 18px 20px; font-weight: 600; }
@@ -37,7 +38,7 @@
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
     .settings-body .actions { margin-top: 16px; }
     .settings-body hr { border: 0; border-top: 1px solid #303b4b; margin: 24px 0; }
-    .notice { padding: 12px 16px; border-left: 3px solid #80dfc5; background: #182e2a; margin-bottom: 20px; overflow-wrap: anywhere; }
+    .notice { padding: 12px 16px; border-left: 3px solid var(--accent); background: var(--accent-background); margin-bottom: 20px; overflow-wrap: anywhere; }
     .notice[data-kind="error"] { border-color: #ffab9f; background: #382420; }
     .notice[data-kind="warning"] { border-color: #9e7942; background: #211b14; color: #ffe0a6; }
     .notice:empty { display: none; }
@@ -51,7 +52,7 @@
     .toolbar { margin: 18px 0; }
     #replays { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; }
     .replay { border: 1px solid #303b4b; border-radius: 10px; padding: 12px; min-width: 0; background: #11151b; }
-    .replay.selected { border-color: #80dfc5; }
+    .replay.selected { border-color: var(--accent); }
     .media-frame { position: relative; border-radius: 7px; overflow: hidden; }
     .thumbnail-frame { margin-bottom: 12px; }
     .access-overlay { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; text-align: center; background: #211b14f2; color: #ffe0a6; border: 1px solid #9e7942; border-radius: 7px; font-size: .85rem; }
@@ -60,15 +61,15 @@
     .thumbnail video { pointer-events: none; }
     .thumbnail-help { margin-bottom: 8px; }
     .browse { margin-bottom: 16px; }
-    button[aria-pressed="true"] { border-color: #80dfc5; color: #80dfc5; }
+    button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
     #pagination { margin-top: 20px; }
     #video { max-height: 50vh; }
-    .replay.selected .replay-name { color: #80dfc5; }
+    .replay.selected .replay-name { color: var(--accent); }
     .replay-name { display: block; font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; margin-bottom: 5px; }
     .replay .actions { margin-top: 10px; gap: 8px; }
     .replay button { font-size: .8rem; padding: 7px 10px; }
     .empty { text-align: center; padding: 32px 8px; color: #a6b2c4; line-height: 1.7; }
-    #queued { color: #80dfc5; overflow-wrap: anywhere; }
+    #queued { color: var(--accent); overflow-wrap: anywhere; }
     footer { font-size: .75rem; color: #a6b2c4; margin-top: 24px; line-height: 1.7; }
     [hidden] { display: none !important; }
     @media (max-width: 760px) { .workspace, .grid { grid-template-columns: 1fr; } }
@@ -422,7 +423,10 @@
       }
     }, (state, error) => {
       $("status").textContent = state;
-      $("status").classList.toggle("connected", state === "Connected");
+      if (state === "Connected") document.documentElement.dataset.connection = "connected";
+      if (state === "Disconnected" && (!connecting || error || !connectionWanted)) {
+        document.documentElement.dataset.connection = connectionWanted ? "lost" : "idle";
+      }
       if (error) notify(error, "error");
       if (state !== "Connected") $("queued").textContent = "Queue state unknown while disconnected.";
       if (state === "Connected") reconnectDelay = 1000;
