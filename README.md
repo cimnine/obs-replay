@@ -24,10 +24,14 @@ You can save from the page, from OBS, with an OBS hotkey, or through [Companion]
 
 ## Open the replay desk
 
-Open [replay-dock.html](./replay-dock.html) in a browser to browse a grid of saved replays.
+Open [obs-replay.pages.dev](https://obs-replay.pages.dev) in a browser to browse a grid of saved replays.
+No download or installation is needed.
+You can also add this URL under **Docks → Custom Browser Docks** in OBS.
+
+For offline use, download [replay-dock.html](./replay-dock.html) and open it in a browser.
 The file includes all styles and JavaScript.
-It needs no installation, internet connection, or local web server.
-You can also add its absolute `file:///…/replay-dock.html` URL under **Docks → Custom Browser Docks** in OBS.
+It needs no internet connection or local web server.
+For an offline OBS dock, use its absolute `file:///…/replay-dock.html` URL.
 
 ### Connect and choose a replay target
 
